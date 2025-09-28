@@ -6,12 +6,12 @@ using Plots
 
 """
     heatmap_hours(df::DataFrame; tz::TimeZone=tz"UTC",
-                  title::AbstractString="How Busy the Weekdays Are?")
+                  title::AbstractString="eekly Occupancy Heatmap?")
 
 Plot a weekday × hour heatmap of busy minutes.
 """
 function heatmap_hours(df::DataFrame; tz::TimeZone=tz"UTC",
-                       title::AbstractString="How Busy the Weekdays Are?")
+                       title::AbstractString="Weekly Occupancy Heatmap")
     occ = occupancy_table(df; by=:hour, tz=tz)
     # Build matrix 7×24 (Mon=1..Sun=7)
     M = fill(0.0, 7, 24)
