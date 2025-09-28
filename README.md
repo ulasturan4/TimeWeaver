@@ -279,7 +279,7 @@ In the Julia REPL, run:
 ```julia
 julia> start = ZonedDateTime(2025, 8, 12, 14, 0, 0, tz"Europe/Istanbul")
 julia> stop  = start + Minute(45)
-julia> res = simulate_event(df, start, stop; summary="WhatIf: Coaching")
+julia> res = simulate_event(df, start, stop; summary="WhatIf: Gym")
 julia> res.would_conflict      # true/false
 ```
 <p align="center"><img src="docs/img/SimulateEvent.png" width="800"></p>
