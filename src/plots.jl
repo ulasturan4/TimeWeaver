@@ -6,7 +6,7 @@ using Plots
 
 """
     heatmap_hours(df::DataFrame; tz::TimeZone=tz"UTC",
-                  title::AbstractString="Weekly Occupancy Heatmap?")
+                  title::AbstractString="Weekly Occupancy Heatmap")
 
 Plot a weekday × hour heatmap of busy minutes.
 """
@@ -30,12 +30,24 @@ end
 
 
 """
-    plot_timeline(df; tz=tz"UTC")
+    plot_timeline(df::DataFrame; tz::TimeZone=tz"UTC", title::AbstractString="Event Timeline") -> Plots.Plot
 
-Gantt-benzeri zaman çizelgesi. X ekseni, df içindeki etkinliklerin
-ilk başlangic son bitiş zamanina otomatik zoom yapar.
+Render a Gantt-like timeline of events. The x-axis auto-zooms to the earliest start
+and latest end in `df` (evaluated in `tz`). The y-axis lists events by index and
+labels rows by `:summary` if available, otherwise by `:uid`.
+
+# Arguments
+- `df::DataFrame`: Must contain `:dtstart` and `:dtend` (`ZonedDateTime`); optional `:summary`, `:uid`.
+
+# Keywords
+- `tz::TimeZone` = `tz"UTC"`: Timezone for converting and displaying times.
+- `title::AbstractString` = `"Event Timeline"`: Figure title.
+
+# Examples
+julia> plot_timeline(df)
+julia> plot_timeline(df; tz=tz"Europe/Istanbul", title="Sprint Schedule")
 """
-function plot_timeline(df::DataFrame; tz::TimeZone=tz"UTC")
+function plot_timeline(df::DataFrame; tz::TimeZone=tz"UTC", title::AbstractString="Event Timeline")
     d = copy(df)
     d[!, :dtstart] = astimezone.(d.dtstart, tz)
     d[!, :dtend]   = astimezone.(d.dtend,   tz)
@@ -47,14 +59,14 @@ function plot_timeline(df::DataFrame; tz::TimeZone=tz"UTC")
     d = sort(d, :dtstart)
     d[!, :row] = 1:nrow(d)
 
-    # X sınırları: tam otomatik (çok küçük tampon)
+
     tmin = minimum(d.dtstart)
     tmax = maximum(d.dtend)
     xlo  = DateTime(tmin) # + Minute(0)
     xhi  = DateTime(tmax) # + Minute(0)
 
     cols = fill(:steelblue, nrow(d))
-    plt = plot(; legend=false, xlabel="Time ($(tz))", ylabel="Event index", xlims=(xlo, xhi))
+    plt = plot(; legend=false, xlabel="Time ($(tz))", ylabel="Event index", xlims=(xlo, xhi), title=title)
     for r in eachrow(d)
         plot!([DateTime(r.dtstart), DateTime(r.dtend)], [r.row, r.row]; lw=8, color=cols[r.row])
     end
@@ -66,13 +78,24 @@ end
 
 
 """
-    plot_conflicts(df; tz=tz"UTC")
+    plot_conflicts(df::DataFrame; tz::TimeZone=tz"UTC", title::AbstractString="Event Conflicts Timeline") -> Plots.Plot
 
-Çakışan etkinlikleri kırmızı gösteren zaman çizelgesi.
-X ekseni, yalnızca çatışmaya karışan etkinliklerin min–max aralığına (otomatik)
-zoom yapar; çatışma yoksa tüm etkinliklerin aralığını kullanır.
+Render a timeline that highlights overlapping (conflicting) events in **red** and
+non-conflicting events in **gray**. The x-axis auto-zooms to the min–max range of
+conflicting events; if there are no conflicts, it spans the full event range (all in `tz`).
+
+# Arguments
+- `df::DataFrame`: Must include `:dtstart` and `:dtend` (`ZonedDateTime`); optional `:summary`, `:uid`.
+
+# Keywords
+- `tz::TimeZone` = `tz"UTC"`: Timezone used to convert and evaluate event times.
+- `title::AbstractString` = `"Event Conflicts Timeline"`: Figure title.
+
+# Examples
+julia> plot_conflicts(df)
+julia> plot_conflicts(df; tz=tz"Europe/Istanbul", title="Overlap Check")
 """
-function plot_conflicts(df::DataFrame; tz::TimeZone=tz"UTC")
+function plot_conflicts(df::DataFrame; tz::TimeZone=tz"UTC", title::AbstractString="Event Conflicts Timeline")
     d = copy(df)
     d[!, :dtstart] = astimezone.(d.dtstart, tz)
     d[!, :dtend]   = astimezone.(d.dtend,   tz)
@@ -81,7 +104,7 @@ function plot_conflicts(df::DataFrame; tz::TimeZone=tz"UTC")
         return plot(title="No events")
     end
 
-    # Çakışan UID’leri bul
+    # Find conflicts
     conf = conflicts(d)
     has_conf = Dict(u => false for u in d.uid)
     for r in eachrow(conf)
@@ -92,22 +115,13 @@ function plot_conflicts(df::DataFrame; tz::TimeZone=tz"UTC")
     d = sort(d, :dtstart)
     d[!, :row] = 1:nrow(d)
 
-    """
-    # X sınırları: önce sadece çatışanlar, yoksa hepsi
-    if any(values(has_conf))
-        df_conf = filter(r -> get(has_conf, r.uid, false), d)
-        tmin = minimum(df_conf.dtstart);  tmax = maximum(df_conf.dtend)
-    else
-        tmin = minimum(d.dtstart);        tmax = maximum(d.dtend)
-    end
-    """
     tmin = minimum(d.dtstart)
     tmax = maximum(d.dtend)
     xlo  = DateTime(tmin) # + Minute(0)
     xhi  = DateTime(tmax) # + Minute(0)
     xlo = DateTime(tmin);  xhi = DateTime(tmax)
 
-    plt = plot(; legend=false, xlabel="Time ($(tz))", ylabel="Event index", xlims=(xlo, xhi))
+    plt = plot(; legend=false, xlabel="Time ($(tz))", ylabel="Event index", xlims=(xlo, xhi),title=title)
     for r in eachrow(d)
         color = get(has_conf, r.uid, false) ? :red : :gray
         plot!([DateTime(r.dtstart), DateTime(r.dtend)], [r.row, r.row]; lw=8, color=color)
@@ -116,72 +130,3 @@ function plot_conflicts(df::DataFrame; tz::TimeZone=tz"UTC")
     return plt
 end
 
-
-
-
-
-
-
-"""
-    conflict_timeline(df; tz=tz"UTC", show_nonconflicts::Bool=false)
-
-Only events that participate in at least one conflict are drawn as horizontal bars.
-X axis auto-zooms to the min–max of the conflicting events.
-If `show_nonconflicts=true`, non-conflicting events are drawn in light gray for context.
-"""
-function conflict_timeline(df::DataFrame; tz::TimeZone=tz"UTC", show_nonconflicts::Bool=false)
-    # Mark conflicting UIDs
-    conf = conflicts(df)
-    conf_uids = Set{eltype(df.uid)}()
-    for r in eachrow(conf)
-        push!(conf_uids, r.uid1); push!(conf_uids, r.uid2)
-    end
-
-    # Convert to plotting tz
-    d = copy(df)
-    d[!, :dtstart] = astimezone.(d.dtstart, tz)
-    d[!, :dtend]   = astimezone.(d.dtend,   tz)
-
-    # Auto zoom range
-    if !isempty(conf_uids)
-        dc = filter(r -> r.uid in conf_uids, d)
-    else
-        dc = d  # no conflicts: fall back to all
-    end
-    if nrow(dc) == 0
-        return plot(title="No events")
-    end
-
-    tmin = minimum(dc.dtstart)
-    tmax = maximum(dc.dtend)
-    xlo  = DateTime(tmin)
-    xhi  = DateTime(tmax)
-
-    # Build the plot
-    d = sort(d, :dtstart)
-    d[!, :row] = 1:nrow(d)
-    plt = plot(; legend=false, xlabel="Time ($(tz))", ylabel="Event",
-               xlims=(xlo, xhi), size=(1200, 720),
-               tickfont=font(10), guidefont=font(12))
-
-    # Optional context: non-conflicts in light gray
-    if show_nonconflicts
-        for r in eachrow(d)
-            if !(r.uid in conf_uids)
-                plot!([DateTime(r.dtstart), DateTime(r.dtend)], [r.row, r.row];
-                      lw=6, color=:lightgray, alpha=0.6)
-            end
-        end
-    end
-
-    # Conflicting events in red
-    for r in eachrow(d)
-        if r.uid in conf_uids
-            plot!([DateTime(r.dtstart), DateTime(r.dtend)], [r.row, r.row];
-                  lw=8, color=:red)
-        end
-    end
-
-    yticks!(1:nrow(d), string.(coalesce.(d.summary, d.uid)))
-    return plt
-end
