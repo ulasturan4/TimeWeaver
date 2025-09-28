@@ -22,21 +22,3 @@ function conflicts(df::DataFrame)
     end
     return DataFrame(rows)
 end
-
-"""
-    find_overloads(df::DataFrame; threshold::Period=Minute(15)) -> DataFrame
-
-Find back-to-back events with gaps smaller than `threshold`.
-Returns rows with :uid_prev, :uid_next, :gap.
-"""
-function find_overloads(df::DataFrame; threshold::Period=Minute(15))
-    d = sort(df, :dtstart)
-    rows = NamedTuple[]
-    for i in 1:nrow(d)-1
-        gap = d[i+1, :dtstart] - d[i, :dtend]
-        if gap < threshold
-            push!(rows, (uid_prev=d[i, :uid], uid_next=d[i+1, :uid], gap=gap))
-        end
-    end
-    return DataFrame(rows)
-end
