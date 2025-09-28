@@ -6,7 +6,7 @@ using Plots
 
 """
     heatmap_hours(df::DataFrame; tz::TimeZone=tz"UTC",
-                  title::AbstractString="eekly Occupancy Heatmap?")
+                  title::AbstractString="Weekly Occupancy Heatmap?")
 
 Plot a weekday × hour heatmap of busy minutes.
 """
