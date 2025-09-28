@@ -68,7 +68,7 @@ julia> df = load_ics(ics_path)
 
 ### 2) Local Development Mode 
 
-Click **Code → Download ZIP**, then extract it to your Desktop  
+Download ZIP**, then extract it to your Desktop  
    - Or use Git in your terminal:  
      ```
      git clone https://github.com/ulasturan4/TimeWeaver.git ~/Desktop/TimeWeaver
