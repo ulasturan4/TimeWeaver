@@ -82,8 +82,7 @@ Download ZIP**, then extract it to your Desktop
 2. **Activate and instantiate the environment**  
    In the Julia REPL, run:
    ```julia
-   julia> cd(raw"/Users/<your-username>/Desktop/TimeWeaver")
-   julia> import Pkg
+   julia> using Pkg
    julia> Pkg.activate(".")
    julia> Pkg.instantiate()
    julia> using TimeWeaver, TimeZones, Dates
