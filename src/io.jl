@@ -2,6 +2,30 @@
 
 # Helpers ----------------------------------------------------------------------
 
+"""
+    _unfold(s::AbstractString) -> Vector{String}
+
+Unfold RFC 5545 (iCalendar) **folded lines** by concatenating any line that starts
+with a single space or tab to the previous line, after stripping the leading whitespace.
+
+# Arguments
+- `s::AbstractString`: Raw iCalendar text (may contain `\\r\\n` or `\\n` line breaks).
+
+# Returns
+- `Vector{String}`: Unfolded lines, one entry per logical line.
+
+# Examples
+julia> txt = "SUMMARY:Very long\\n continuation\\nDESCRIPTION:Hello\\n\\tWorld"
+julia> _unfold(txt)
+2-element Vector{String}:
+ "SUMMARY:Very longcontinuation"
+ "DESCRIPTION:HelloWorld"
+
+julia> _unfold("KEY:val\\n NEXT:line")
+2-element Vector{String}:
+ "KEY:val"
+ "NEXT:line"
+"""
 # Unfold RFC5545 folded lines
 function _unfold(s::AbstractString)
     out = String[]
@@ -15,6 +39,32 @@ function _unfold(s::AbstractString)
     return out
 end
 
+"""
+    _split_prop(ln::AbstractString) -> Tuple{String, Dict{String,String}, String}
+
+Split an iCalendar/RFC 5545 property line of the form
+`NAME;PARAM=VAL;PARAM2=VAL2:VALUE` into `(name, params, value)`.
+
+- `name` — property name as `String`
+- `params` — dictionary of parameter key–value pairs (bare parameters are ignored)
+- `value` — the text after the first `:` (empty string if `:` is absent)
+
+# Arguments
+- `ln::AbstractString`: A single unfolded property line.
+
+# Returns
+- `Tuple{String, Dict{String,String}, String}`: `(name, params, value)`.
+
+# Examples
+julia> _split_prop("ATTENDEE;CN=Alice;ROLE=REQ-PARTICIPANT:mailto:alice@example.com")
+("ATTENDEE", Dict("CN" => "Alice", "ROLE" => "REQ-PARTICIPANT"), "mailto:alice@example.com")
+
+julia> _split_prop("SUMMARY:Team Sync")
+("SUMMARY", Dict{String,String}(), "Team Sync")
+
+julia> _split_prop("UID;X-CUSTOM=abc123")
+("UID", Dict("X-CUSTOM" => "abc123"), "")
+"""
 # Split "NAME;PARAM=VAL;PARAM2=VAL2:VALUE" → (name::String, Dict{String,String}, value::String)
 function _split_prop(ln::AbstractString)
     name_and_params, value = occursin(":", ln) ? split(ln, ":", limit=2) : (ln, "")
@@ -32,6 +82,28 @@ function _split_prop(ln::AbstractString)
     return name, params, String(value)
 end
 
+"""
+    _unescape_ics_text(s::AbstractString) -> String
+
+De-escape RFC 5545 (iCalendar) text by converting common escape sequences:
+- `\\n` / `\\N` → newline
+- `\\,` → comma `,`
+- `\\;` → semicolon `;`
+- `\\\\` → backslash `\`
+
+# Arguments
+- `s::AbstractString`: Raw ICS text (with RFC 5545 escapes).
+
+# Returns
+- `String`: The unescaped text.
+
+# Examples
+julia> _unescape_ics_text("Line1\\nLine2")
+"Line1\nLine2"
+
+julia> _unescape_ics_text("Alice\\, Bob; note\\; ok \\\\ path")
+"Alice, Bob; note; ok \\ path"
+"""
 # De-escape ICS text: \n, \, \; \, \\
 function _unescape_ics_text(s::AbstractString)
     s = replace(s, "\\n" => "\n", "\\N" => "\n")
@@ -41,6 +113,35 @@ function _unescape_ics_text(s::AbstractString)
     return s
 end
 
+
+
+"""
+    _parse_dt(value::AbstractString; tzid::Union{Nothing,AbstractString}=nothing) -> ZonedDateTime
+
+Parse ISO-8601 **basic** datetime forms used in iCalendar (RFC 5545) and return a
+`ZonedDateTime`. Supports UTC forms with a trailing `Z`, and local forms (with or
+without time) optionally interpreted under `tzid`.
+
+Accepted formats:
+- UTC (`...Z`): `yyyymmddTHHMMSSZ`, `yyyymmddTHHMMZ`, `yyyymmddZ`  → parsed in `UTC`
+- Local: `yyyymmddTHHMMSS`, `yyyymmddTHHMM`, `yyyymmdd`
+  - Interpreted in `tzid` if provided, else `UTC`.
+
+# Arguments
+- `value::AbstractString`: ISO-8601 basic string from ICS (e.g., `"20250812T140000Z"`).
+- `tzid::Union{Nothing,AbstractString}`: IANA timezone name for local values
+  (e.g., `"Europe/Istanbul"`). Ignored for `...Z`. Default: `nothing` → `UTC`.
+
+# Returns
+- `ZonedDateTime`: Parsed timestamp with timezone.
+
+# Examples
+julia> _parse_dt("20250812T140000Z")
+2025-08-12T14:00:00+00:00
+
+julia> _parse_dt("20250812T1400"; tzid="Europe/Istanbul")
+2025-08-12T14:00:00+03:00
+"""
 # Parse ISO8601 basic datetime variants used in ICS
 function _parse_dt(value::AbstractString; tzid::Union{Nothing,AbstractString}=nothing)
     if endswith(value, "Z")
@@ -68,6 +169,38 @@ function _parse_dt(value::AbstractString; tzid::Union{Nothing,AbstractString}=no
     end
 end
 
+
+"""
+    _parse_duration(s::AbstractString) -> Dates.CompoundPeriod
+
+Parse an ISO-8601 **DURATION** string (RFC 5545/ICS), such as `P1D`, `PT1H30M`,
+`PT45M`, or `PT30S`, and return the corresponding `Dates.CompoundPeriod`
+(e.g., `Day(1) + Hour(1) + Minute(30)`).
+
+Accepted forms:
+- `P<d>D` (days)
+- `PT<h>H<m>M<s>S` (any subset of hours, minutes, seconds)
+- Combination: `P<d>D` with optional `T…` time part
+
+# Arguments
+- `s::AbstractString`: Duration in ISO-8601 basic format (e.g., `"PT1H30M"`).
+
+# Returns
+- `Dates.CompoundPeriod`: Sum of `Day`, `Hour`, `Minute`, `Second`.
+
+# Examples
+julia> _parse_duration("P1D")
+1 day
+
+julia> _parse_duration("PT1H30M")
+1 hour, 30 minutes
+
+julia> _parse_duration("PT45M")
+45 minutes
+
+julia> _parse_duration("PT30S")
+30 seconds
+"""
 # Parse ISO8601 DURATION like P1D, PT1H30M, PT45M, PT30S
 function _parse_duration(s::AbstractString)
     m = match(r"^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$", s)
