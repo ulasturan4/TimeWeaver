@@ -62,6 +62,7 @@ In the Julia REPL:
 julia> using Pkg
 julia> Pkg.add(url="https://github.com/ulasturan4/TimeWeaver.git", rev="main")
 julia> using TimeWeaver, TimeZones, Dates
+julia> pkgroot = Pkg.project().path
 julia> ics_path = joinpath(pkgroot, "data", "mycalendar.ics")
 julia> df = load_ics(ics_path)
 ```
